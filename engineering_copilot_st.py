@@ -268,7 +268,8 @@ def ask_llm(prompt: str, language: str, temperature: float = 0.2) -> str | None:
                 {"role": "system", "content": system_message},
                 {"role": "user", "content": prompt}
             ],
-            temperature=temperature
+            temperature=temperature,
+            max_tokens=3000
         )
         return response.choices[0].message.content
     except Exception as e:
