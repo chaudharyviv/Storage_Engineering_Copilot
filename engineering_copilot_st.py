@@ -357,4 +357,4 @@ with tab_storage:
 st.markdown("---")
 date_format = '%d %b %Y %H:%M' if language == "English" else '%d.%m.%Y %H:%M'
 st.caption(lang["footer"].format(date=datetime.now().strftime(date_format)))
-st.caption("This application is based on AI outputs, please use carefully."
+st.caption("This application is based on AI outputs, please use carefully.")
