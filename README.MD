@@ -1,4 +1,4 @@
-```markdown
+
 ## Storage Engineering AI Assistant
 
 This is a Streamlit-based AI assistant for storage engineers and management.  
