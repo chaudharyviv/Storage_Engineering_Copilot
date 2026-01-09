@@ -1,34 +1,34 @@
 import streamlit as st
 from openai import OpenAI
 from datetime import datetime
-from dotenv import load_dotenv
-import os
-
-
-load_dotenv(override=True)
-
-if not os.getenv("OPENAI_API_KEY"):
-    st.error("OPENAI_API_KEY not found in environment variables")
-    st.stop()
-
-client = OpenAI()
 
 # ============================
 # Configuration & Constants
 # ============================
 
-
 st.set_page_config(
     page_title="Storage Engineering AI Assistant",
     layout="wide"
 )
+# ============================
+# Secrets and API Client Initialization
+# ============================
 
-VENDORS = ["NetApp ONTAP", "Pure Storage", "Dell EMC PowerMax"]
+if "OPENAI_API_KEY" not in st.secrets:
+    st.error("OpenAI API key not found. Please add it to your Streamlit secrets.")
+    st.info("Create a file .streamlit/secrets.toml with: OPENAI_API_KEY = 'YOUR_API_KEY'")
+    st.stop()
+
+# Initialize the OpenAI client with the API key from secrets
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+
+VENDORS = ["NetApp ONTAP", "Pure FlashArray", "Dell EMC PowerMax"]
 
 TAB_NAMES = ["📊 Management Dashboard", "💾 Storage Engineering"]
 
-# Use cases: (English key, English display, German display)
-# English key is used internally for prompt lookup
+# Use cases: (English key, English display, German display). English key is used internally for prompt lookup
+
+
 USE_CASES = [
     ("Explain Issue and Error", "Explain Issue and Error", "Problem/Fehler erklären"),
     ("Generate Runbook", "Generate Runbook", "Runbook generieren"),
@@ -49,7 +49,7 @@ TRANSLATIONS = {
         "page_caption": "Engineering copilot for Storage teams",
         "sidebar_header": "ℹ️ Demo Info",
         "sidebar_audience": "**Audience**\n- Storage Engineering\n- Management",
-        "sidebar_vendors": "**Vendors Covered**\n- NetApp\n- Pure Storage\n- Dell EMC PowerMax",
+        "sidebar_vendors": "**Vendors Covered**\n- NetApp\n- Pure FlashArray\n- Dell EMC PowerMax",
         "language_label": "🌍 Select Language / Sprache wählen",
         "metrics": ["Supported Vendors", "Use Cases", "Engineers Impacted", "Time Saved (Est.)"],
         "dashboard_title": "📊 Engineering AI Usage Overview",
@@ -86,7 +86,7 @@ TRANSLATIONS = {
         "page_caption": "Engineering Copilot für Storage-Teams",
         "sidebar_header": "ℹ️ Demo Info",
         "sidebar_audience": "**Zielgruppe**\n- Storage Engineering\n- Management",
-        "sidebar_vendors": "**Unterstützte Hersteller**\n- NetApp ONTAP\n- Pure Storage\n- Dell EMC PowerMax",
+        "sidebar_vendors": "**Unterstützte Hersteller**\n- NetApp ONTAP\n- Pure FlashArray\n- Dell EMC PowerMax",
         "language_label": "🌍 Select Language / Sprache wählen",
         "metrics": ["Unterstützte Hersteller", "Anwendungsfälle", "Betroffene Engineers", "Zeitersparnis (geschätzt)"],
         "dashboard_title": "📊 Engineering KI-Nutzungsübersicht",
@@ -357,3 +357,4 @@ with tab_storage:
 st.markdown("---")
 date_format = '%d %b %Y %H:%M' if language == "English" else '%d.%m.%Y %H:%M'
 st.caption(lang["footer"].format(date=datetime.now().strftime(date_format)))
+st.caption("This application is based on AI outputs, please use carefully."
