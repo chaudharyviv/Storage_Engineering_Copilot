@@ -1,0 +1,35 @@
+Current utilization: 68%
+Growth: 15% YoY
+Workloads: Oracle + SAP + VDI
+Planning horizon: 24 months
+
+Vendor: Pure FlashArray
+Use Case: Generate Change Request Documentation
+Input:
+Upgrade Pure FlashArray Purity OS from 6.3.5 to 6.4.10 on production array.
+Reason: Security patches + new features for NVMe-oF support.
+Affects: 200+ production volumes, 3 critical SAP systems, core banking platform.
+Planned maintenance window: Saturday 22:00 - Sunday 06:00.
+
+
+Vendor: NetApp ONTAP (current)
+Use Case: Cross-Vendor Migration
+Input:
+Planning migration from NetApp FAS8200 (200TB used, FC/NFS) to Pure FlashArray//X70.
+Environment: 15 VMware ESXi hosts, 8 physical database servers (Oracle RAC), 
+production 24/7 with max 4-hour maintenance window.
+Need zero data loss, minimal downtime strategy.
+
+
+Audit-Ready Incident RCA
+Snapshot schedule misconfiguration caused application restore failure during DR test.
+
+
+Vendor: Dell EMC PowerMax
+Use Case: Generate Ansible Playbook
+Input:
+Create a playbook to provision a new storage group with 5 LUNs (500GB each), 
+assign to host 'db-prod-host-03', set service level to 'Diamond', 
+enable compression, and create a snapshot schedule (daily at 2 AM, retain 7 days).
+Include pre-checks and validation steps.
+
