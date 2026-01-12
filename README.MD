@@ -161,7 +161,7 @@ MODEL_VERSION = "gpt-4o"  # or "gpt-4-turbo", etc.
 
 ### Input Limits
 - Maximum input length: 5,000 characters (configurable via `MAX_INPUT_LENGTH`)
-- Maximum output tokens: 3,000 (configurable via `MAX_OUTPUT_TOKENS`)
+- Maximum output tokens: 1,500 (configurable via `MAX_OUTPUT_TOKENS`)
 
 ### Customization Options
 
