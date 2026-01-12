@@ -23,7 +23,7 @@ st.warning(
 
 # Constants
 MAX_INPUT_LENGTH = 5000
-MAX_OUTPUT_TOKENS = 3000         # Hard limit for output tokens
+MAX_OUTPUT_TOKENS = 1500         # Reduced default for output tokens (practical balance)
 MODEL_VERSION = "gpt-4o-mini"  
 
 # ============================
@@ -38,20 +38,17 @@ if "token_usage" not in st.session_state:
 
 if "OPENAI_API_KEY" not in st.secrets:
     st.error("OpenAI API key not found. Please add it to your Streamlit secrets.")
-    st.info("Create a secrets.toml in UI or locally in .streamlit with: OPENAI_API_KEY = 'YOUR_API_KEY'")
+    st.info("Create a secrets.toml in UI or locally with in .streamlit/secrets.toml with: OPENAI_API_KEY = 'YOUR_API_KEY'")
     st.stop()
 
 # Initialize the OpenAI client with the API key from secrets
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-
 VENDORS = ["NetApp ONTAP", "Pure FlashArray", "Dell EMC PowerMax"]
-
 TAB_NAMES = ["📊 Management Dashboard", "💾 Storage Engineering"]
 
-
 # ============================
-# 12 Use cases : English display, German display). 
-# English key for prompt lookup
+# 12 Use cases : (English display, German display). 
+# English key for prompt lookup, same applies for other langauages es, fr, ja or zh
 # ============================
 USE_CASES = [
     ("Explain Issue and Error", "Explain Issue and Error", "Problem/Fehler erklären"),
@@ -178,7 +175,7 @@ Your responses must be:
 """
 
 # ============================
-# Prompt Templates (keys = English internal name)
+# Prompt Templates (keys = English internal name in use_cases)
 # ============================
 PROMPT_TEMPLATES = {
     "Explain Issue and Error": """
@@ -376,11 +373,19 @@ def validate_input(user_input: str) -> Tuple[bool, Optional[str]]:
         return False, "too_long"
     return True, None
 
-def ask_llm(prompt: str, language: str, temperature: float = 0.25, top_p: float = 0.90) -> Tuple[Optional[str], Optional[Dict]]:
-    """Call OpenAI API with enhanced error handling"""
+def ask_llm(prompt: str, language: str, temperature: float = 0.25, top_p: float = 0.90, max_tokens: Optional[int] = None) -> Tuple[Optional[str], Optional[Dict]]:
+    """Call OpenAI API with defensive parsing and robust token accounting.
+
+    This function tolerates multiple response shapes (dict-like or SDK objects),
+    safely extracts content, usage and model name, and updates Streamlit token accounting
+    without raising on unexpected/missing fields.
+    """
     response_language = "German" if language == "German / Deutsch" else "English"
     full_system = SYSTEM_PROMPT.format(response_language=response_language)
-    
+
+    # Use provided max_tokens or fallback to global constant
+    requested_max_tokens = max_tokens or MAX_OUTPUT_TOKENS
+
     try:
         response = client.chat.completions.create(
             model=MODEL_VERSION,
@@ -389,48 +394,122 @@ def ask_llm(prompt: str, language: str, temperature: float = 0.25, top_p: float 
                 {"role": "user", "content": prompt}
             ],
             temperature=temperature,
-            max_tokens=MAX_OUTPUT_TOKENS,
+            max_tokens=requested_max_tokens,
             top_p=top_p,
             frequency_penalty=0.0,
             presence_penalty=0.0
         )
-        
+
+        # --- Defensive extractors ---
+        def _get_attr_or_key(obj, key, default=None):
+            try:
+                if obj is None:
+                    return default
+                if isinstance(obj, dict):
+                    return obj.get(key, default)
+                return getattr(obj, key, default)
+            except Exception:
+                return default
+
+        # Model name
+        model_name = _get_attr_or_key(response, "model", None)
+
+        # Usage extraction - result as a dict if possible
+        usage_raw = _get_attr_or_key(response, "usage", {}) or {}
+        usage = {}
+        try:
+            # If it's an SDK object with model_dump / dict method
+            if hasattr(usage_raw, "model_dump"):
+                usage = usage_raw.model_dump() or {}
+            elif hasattr(usage_raw, "to_dict"):
+                usage = usage_raw.to_dict() or {}
+            elif isinstance(usage_raw, dict):
+                usage = usage_raw
+            else:
+                # Last resort: try to convert
+                usage = dict(usage_raw) if usage_raw else {}
+        except Exception:
+            usage = usage_raw if isinstance(usage_raw, dict) else {}
+
+        # Extract total tokens robustly
+        total_tokens = 0
+        for k in ("total_tokens", "total", "completion_tokens"):
+            try:
+                v = usage.get(k) if isinstance(usage, dict) else None
+                if v is not None:
+                    total_tokens = int(v)
+                    break
+            except Exception:
+                continue
+
+        # Content extraction - support multiple shapes:
+        content = None
+        choices = _get_attr_or_key(response, "choices", None)
+        if choices:
+            try:
+                first = choices[0]
+                # If first is dict-like
+                if isinstance(first, dict):
+                    # new-format: message -> content
+                    content = first.get("message", {}).get("content") or first.get("text") or first.get("content")
+                else:
+                    # SDK object - try message.content then text
+                    msg = _get_attr_or_key(first, "message", None)
+                    content = _get_attr_or_key(msg, "content", None) or _get_attr_or_key(first, "text", None)
+            except Exception:
+                content = None
+
+        # Fallback content locations
+        if content is None:
+            content = _get_attr_or_key(response, "text", None) or _get_attr_or_key(response, "content", None)
+
+        # Build metadata (safe)
         metadata = {
-            "model": response.model,
-            "usage": response.usage.model_dump() if hasattr(response.usage, "model_dump") else {
-                "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens
-            },
+            "model": model_name or "unknown",
+            "usage": usage if isinstance(usage, dict) else {},
+            "requested_max_tokens": requested_max_tokens,
             "timestamp": datetime.now().isoformat()
         }
-        
-        # Update token usage
-        st.session_state.token_usage["total_tokens"] += metadata["usage"]["total_tokens"]
-        st.session_state.token_usage["requests"] += 1
-        
-        return response.choices[0].message.content, metadata
-        
+
+        # --- Safe session token accounting ---
+        try:
+            # ensure session_state keys exist
+            if "token_usage" not in st.session_state:
+                st.session_state.token_usage = {"total_tokens": 0, "requests": 0}
+
+            st.session_state.token_usage["total_tokens"] = st.session_state.token_usage.get("total_tokens", 0) + int(total_tokens or 0)
+            st.session_state.token_usage["requests"] = st.session_state.token_usage.get("requests", 0) + 1
+        except Exception:
+            # Never let accounting errors crash the app; log server-side if available
+            try:
+                st.warning("Token accounting failed to update; check server logs.")
+            except Exception:
+                pass
+
+        # Return the best effort content + metadata
+        return content, metadata
+
     except Exception as e:
+        # Classify and show user-friendly messages, without exposing internals
         error_type = type(e).__name__
-        error_message = str(e)
-        
-        # Enhanced error handling
-        if "RateLimitError" in error_type or "rate_limit" in error_message.lower():
+        error_message = str(e).lower()
+
+        if "rate" in error_message or "ratelimit" in error_type.lower() or "rate_limit" in error_message:
             st.error("⚠️ API rate limit exceeded. Please wait a moment and try again.")
-        elif "APIConnectionError" in error_type or "connection" in error_message.lower():
-            st.error("⚠️ Network connection error. Please check your internet connection.")
-        elif "InvalidRequestError" in error_type or "invalid" in error_message.lower():
-            st.error(f"⚠️ Invalid request: {error_message}")
-        elif "AuthenticationError" in error_type or "authentication" in error_message.lower():
+        elif "auth" in error_message or "authentication" in error_type.lower():
             st.error("⚠️ Authentication error. Please check your API key configuration.")
+        elif "connection" in error_message or "apiconnectionerror" in error_type.lower():
+            st.error("⚠️ Network connection error. Please check your internet connection.")
+        elif "invalid" in error_message or "invalidrequesterror" in error_type.lower():
+            st.error(f"⚠️ Invalid request: {str(e)}")
         else:
-            st.error(f"⚠️ Error contacting OpenAI API: {error_message}")
-        
+            # Generic fallback
+            st.error(f"⚠️ Error contacting OpenAI API: {str(e)}")
+
         return None, None
 
 # ============================
-# UI Setup - Sidebar & Language Setup
+# UI Sidebar & Language Setup
 # ============================
 language = st.sidebar.radio(
     "🌍 Select Language / Sprache wählen",
@@ -540,11 +619,13 @@ with tab_storage:
             prompt = PROMPT_TEMPLATES[task_key].format(vendor=vendor, user_input=user_input)
             
             with st.spinner(lang.get("spinner_text", "Generating...")):
-                result, metadata = ask_llm(prompt, language, temperature, top_p)
+                # Pass the new default explicitly
+                result, metadata = ask_llm(prompt, language, temperature, top_p, max_tokens=MAX_OUTPUT_TOKENS)
             
             if result:
                 if metadata:
-                    st.caption(f"Model: {metadata['model']} • Tokens: {metadata['usage']['total_tokens']}")
+                    total_tokens_display = metadata.get('usage', {}).get('total_tokens', 'N/A')
+                    st.caption(f"Model: {metadata.get('model', 'unknown')} • Tokens: {total_tokens_display}")
                 
                 with st.expander(lang.get("output_title", "Result"), expanded=True):
                     if task_key == "Generate Ansible Playbook":
