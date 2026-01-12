@@ -13,12 +13,12 @@ st.set_page_config(
 )
 
 # GLOBAL WARNING – ALWAYS VISIBLE
-st.markdown("### ⚠️ Important Notice")
+st.markdown("### ⚠️ Important Notice ")
 st.warning(
-    "Advisory tool only."
-    "**Do not paste user data, credentials, personally identifiable information (PII)**."
-    "Do not any confidential and strictly confidential information."
-    "All outputs must be independently reviewed and validated."
+    "Advisory tool only. "
+    "**Do not paste user data, credentials, personally identifiable information (PII)**. "
+    "Do not any confidential and strictly confidential information. "
+    "All outputs must be independently reviewed and validated. "
 )
 
 # Constants
